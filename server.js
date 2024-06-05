@@ -12,7 +12,6 @@ var fly;
 var betamount =0;
 var clients = [];
 
-// Establish MySQL database connection using environment variables
 var db_config = {
   host: process.env.DB_HOST || '144.76.3.17',
   user: process.env.DB_USER || 'flypcoin_gm',
