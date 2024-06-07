@@ -14,7 +14,7 @@ var clients = [];
 
 // Database connections here
 var db_config = {
-  host: process.env.DB_HOST || '144.76.3.17',
+  host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'flypcoin_gm',
   password: process.env.DB_PASSWORD || 'flypcoin_gm',
   database: process.env.DB_NAME || 'flypcoin_gm',
