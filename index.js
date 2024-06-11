@@ -68,9 +68,9 @@ io.on('connection', function(socket){
 
         const connectiona = mysql.createConnection({
         host: 'localhost',
-        user: 'brezzyon_game',
-        password: 'brezzyon_game',
-        database: 'brezzyon_game'
+        user: 'flypcoin_gm',
+        password: 'flypcoin_gm',
+        database: 'flypcoin_gm'
         });
       
       const checkbalanceQuery = 'SELECT * FROM users WHERE username = ?';
@@ -123,9 +123,9 @@ io.on('connection', function(socket){
 
         const connectionb = mysql.createConnection({
         host: 'localhost',
-        user: 'brezzyon_game',
-        password: 'brezzyon_game',
-        database: 'brezzyon_game'
+        user: 'flypcoin_gm',
+        password: 'flypcoin_gm',
+        database: 'flypcoin_gm'
         });
         
         const checkbalanceQueryz = 'SELECT * FROM users WHERE username = ?';
