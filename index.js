@@ -2,7 +2,7 @@ var app = require('express')();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
 const path = require('path');
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3306;
 
 const mysql = require('mysql');
 
