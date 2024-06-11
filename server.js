@@ -1,28 +1,34 @@
 const http = require('http');
 const socketIO = require('socket.io');
 const mysql = require('mysql');
+const express = require('express');
+const path = require('path');
 
+const hostname = 'localhost';
 const port = process.env.PORT || 3003;
 
-const server = http.createServer();
+const app = express();
+const server = http.createServer(app);
 const io = socketIO(server);
-var crashPosition = 1;
-var finalcrash = 0;
-var fly;
-var betamount =0;
-var clients = [];
 
-// Database connections here
-var db_config = {
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'flypcoin_gm',
-  password: process.env.DB_PASSWORD || 'flypcoin_gm',
-  database: process.env.DB_NAME || 'flypcoin_gm',
+let crashPosition = 1;
+let finalcrash = 0;
+let fly;
+let betamount = 0;
+let clients = [];
+
+// MySQL database configuration
+const db_config = {
+  host: 'localhost',
+  user: 'flypcoin_gm',
+  password: 'flypcoin_gm',
+  database: 'flypcoin_gm',
   keepAlive: true,
 };
 
 let connection;
 
+// Function to handle MySQL disconnection and reconnection
 function handleDisconnect() {
   connection = mysql.createConnection(db_config);
 
@@ -42,84 +48,69 @@ function handleDisconnect() {
   });
 }
 
-function deleteAndAddId() {
-  const deleteQuery = `DELETE FROM bet`;
-  connection.query(deleteQuery, (err, result) => {
-    if (err) {
-      console.error('Error deleting records:', err);
-    } else {
-      const insertQuery = `INSERT INTO bet (id) VALUES (1)`;
-      connection.query(insertQuery, (err, result) => {
-        if (err) {
-          console.error('Error adding ID:', err);
-        } 
-      });
-    }
-  });
-}
-
-setInterval(deleteAndAddId, 5000);
-
 handleDisconnect();
 
-function setcrash() {
-  const query23 = `SELECT nxt FROM aviset WHERE id =1`;
-  connection.query(query23, (err, result) => {
+// Function to set crash point
+function setCrashPoint() {
+  const query = `SELECT nxt FROM aviset WHERE id = 1`;
+  connection.query(query, (err, result) => {
     if (err) {
-      console.error('Error adding record to database:', err);
+      console.error('Error fetching next crash point:', err);
     } else {
-      nxtcrash = result[0].nxt;
+      const nxtcrash = result[0].nxt;
       if (nxtcrash == 0) {
-        const query9 = `SELECT SUM(amount) AS total FROM crashbetrecord WHERE status ='pending'`;
-        connection.query(query9, (err, result) => {
+        const query = `SELECT SUM(amount) AS total FROM crashbetrecord WHERE status = 'pending'`;
+        connection.query(query, (err, result) => {
           if (err) {
-            console.error('Error adding record to database:', err);
+            console.error('Error fetching total bet amount:', err);
           } else {
             betamount = result[0].total || 0;
+
             if (betamount == 0) {
               finalcrash = Math.floor(Math.random() * 6) + 2;
-              repeatupdate(200);
+              updateCrashInterval(200);
             } else if (betamount <= 100) {
-              finalcrash = (Math.random() * 0.5 + 1).toFixed(2); 
-              repeatupdate(300);
+              finalcrash = (Math.random() * 0.5 + 1).toFixed(2);
+              updateCrashInterval(300);
             } else {
-              finalcrash = (Math.random() * 0.5 + 1).toFixed(2); 
-              repeatupdate(200);
+              finalcrash = (Math.random() * 0.5 + 1).toFixed(2);
+              updateCrashInterval(200);
             }
           }
         });
       } else {
         finalcrash = parseFloat(nxtcrash);
-        repeatupdate(200);
-        const query36 = `UPDATE aviset SET nxt = 0 WHERE id = 1`;
-        connection.query(query36, (err, result) => {
+        updateCrashInterval(200);
+        const updateQuery = `UPDATE aviset SET nxt = 0 WHERE id = 1`;
+        connection.query(updateQuery, (err) => {
           if (err) {
-            console.error('Error adding record to database:', err);
-          } 
+            console.error('Error resetting next crash point:', err);
+          }
         });
       }
     }
   });
 }
 
-function restartplane() {
+// Function to reset the plane
+function resetPlane() {
   clearInterval(fly);
-  const query5 = `INSERT INTO crashgamerecord (crashpoint) VALUES ('${crashPosition}')`;
-  connection.query(query5, (err, result) => {
+  const insertQuery = `INSERT INTO crashgamerecord (crashpoint) VALUES ('${crashPosition}')`;
+  connection.query(insertQuery, (err) => {
     if (err) {
-      console.error('Error adding record to database:', err);
-    } 
+      console.error('Error inserting crash point:', err);
+    }
   });
   io.emit('updatehistory', crashPosition);
 
   setTimeout(() => {
-    const query4 = `UPDATE crashbetrecord SET status = 'fail',winpoint='${crashPosition}' WHERE status = 'pending'`;
-    connection.query(query4, (err, result) => {
+    const updateQuery = `UPDATE crashbetrecord SET status = 'fail', winpoint='${crashPosition}' WHERE status = 'pending'`;
+    connection.query(updateQuery, (err) => {
       if (err) {
-        console.error('Error adding record to database:', err);
-      } 
+        console.error('Error updating crash bet record:', err);
+      }
     });
-    io.volatile.emit('reset', 'resetting plane.....');
+    io.volatile.emit('reset', 'resetting plane...');
   }, 200);
 
   setTimeout(() => {
@@ -128,86 +119,87 @@ function restartplane() {
       io.emit('prepareplane');
       crashPosition = 0.99;
       io.emit('flyplane');
-      setTimeout(() => {
-        setcrash();
-      }, 1000);
+      setTimeout(setCrashPoint, 1000);
     }, 4000);
   }, 3000);
 }
 
+// Function to update crash multiplier
 function updateCrashInfo() {
-  var fc = parseFloat(finalcrash);
-  var cp = parseFloat(crashPosition);
-  if (fc > cp) {
+  if (parseFloat(finalcrash) > parseFloat(crashPosition)) {
     crashPosition = (parseFloat(crashPosition) + 0.01).toFixed(2);
     io.emit('crash-update', crashPosition);
   } else {
-    restartplane();
+    resetPlane();
   }
 }
 
-function repeatupdate(duration) {
+// Function to repeatedly update crash data
+function updateCrashInterval(duration) {
   fly = setInterval(updateCrashInfo, duration);
 }
 
+// Express route to serve the HTML file
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'test.html'));
+});
+
+// Socket.io connection handling
 io.on('connection', (socket) => {
   clients.push(socket.id);
   socket.emit('working', 'ACTIVE...!');
 
-  socket.on('disconnect', () => {});
+  socket.on('disconnect', () => {
+    clients = clients.filter((clientId) => clientId !== socket.id);
+  });
 
-  socket.on('newBet', function (username, amount) {
-    const bal = `SELECT balance From users WHERE username = '${username}'`;
-    connection.query(bal, (err, result) => {
+  socket.on('newBet', (username, amount) => {
+    const balanceQuery = `SELECT balance FROM users WHERE username = ?`;
+    connection.query(balanceQuery, [username], (err, result) => {
       if (err) {
-        console.error('Error adding record to database:', err);
-      } else {
-        if (result[0].balance > amount) {
-          const query1 = `UPDATE users SET balance = balance - ${amount} WHERE username = '${username}'`;
-          connection.query(query1, (err, result) => {
-            if (err) {
-              console.error('Error adding record to database:', err);
-            } 
-          });
-          const query = `INSERT INTO crashbetrecord (username, amount) VALUES ('${username}', ${amount})`;
-          connection.query(query, (err, result) => {
-            if (err) {
-              console.error('Error adding record to database:', err);
-            } 
-          });
-        }
+        console.error('Error fetching user balance:', err);
+      } else if (result[0] && result[0].balance >= amount) {
+        const updateBalanceQuery = `UPDATE users SET balance = balance - ? WHERE username = ?`;
+        connection.query(updateBalanceQuery, [amount, username], (err) => {
+          if (err) {
+            console.error('Error updating user balance:', err);
+          }
+        });
+        const insertBetQuery = `INSERT INTO crashbetrecord (username, amount) VALUES (?, ?)`;
+        connection.query(insertBetQuery, [username, amount], (err) => {
+          if (err) {
+            console.error('Error inserting bet record:', err);
+          }
+        });
       }
     });
   });
 
-  socket.on('addWin', function (username, amount, winpoint) {
-    const bets = `SELECT SUM(amount) AS bets FROM crashbetrecord WHERE status ='pending' AND username = '${username}'`;
-    connection.query(bets, (err, result) => {
+  socket.on('addWin', (username, amount, winpoint) => {
+    const betsQuery = `SELECT SUM(amount) AS bets FROM crashbetrecord WHERE status = 'pending' AND username = ?`;
+    connection.query(betsQuery, [username], (err, result) => {
       if (err) {
-        console.error('Error adding record to database:', err);
-      } else {
-        if (result[0].bets > 0) {
-          var winamount = parseFloat((amount * 98 / 100) * winpoint);
-          winamount = winamount.toFixed(2);
-          const query2 = `UPDATE users SET balance = balance + ${winamount} WHERE username = '${username}'`;
-          connection.query(query2, (err, result) => {
-            if (err) {
-              console.error('Error adding record to database:', err);
-            }
-          });
-          const query3 = `UPDATE crashbetrecord SET status = 'success', winpoint='${winpoint}' WHERE username = '${username}' AND status = 'pending'`;
-          connection.query(query3, (err, result) => {
-            if (err) {
-              console.error('Error adding record to database:', err);
-            } 
-          });
-        }
+        console.error('Error fetching bet amount:', err);
+      } else if (result[0] && result[0].bets > 0) {
+        const winAmount = ((amount * 0.98) * winpoint).toFixed(2);
+        const updateBalanceQuery = `UPDATE users SET balance = balance + ? WHERE username = ?`;
+        connection.query(updateBalanceQuery, [winAmount, username], (err) => {
+          if (err) {
+            console.error('Error updating user balance:', err);
+          }
+        });
+        const updateBetRecordQuery = `UPDATE crashbetrecord SET status = 'success', winpoint = ? WHERE username = ? AND status = 'pending'`;
+        connection.query(updateBetRecordQuery, [winpoint, username], (err) => {
+          if (err) {
+            console.error('Error updating bet record:', err);
+          }
+        });
       }
     });
   });
 });
 
-setcrash();
+setCrashPoint();
 server.listen(port, () => {
   console.log(`Server running at :${port}/`);
 });
